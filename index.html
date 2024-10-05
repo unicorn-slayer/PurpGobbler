@@ -1,0 +1,611 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Purp Gobbler</title>
+    <link rel="stylesheet" href="game.css">
+    <style>
+        /* Add the CSS styles directly here or keep in game.css */
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            height: 100vh; /* Full viewport height */
+            background: linear-gradient(135deg, #b8e994, #38a169); /* Cool green gradient background */
+        }
+
+        h1 {
+            font-family: 'Press Start 2P', cursive; /* Graffiti style font */
+            font-size: 3rem;
+            color: #4b0082; /* Deep purple for the title */
+            text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.7); /* Shadow for graffiti effect */
+            margin: 75px;
+        }
+
+        p {
+            font-family: 'Press Start 2P', cursive; /* Match the font style */
+            font-size: 1.5rem; /* Size for the instruction text */
+            color: #4b0082; /* White color for the text */
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.7); /* Shadow for better visibility */
+            margin: 50px 0; /* Space above and below the text */
+        }
+
+        /* Optional: Style the canvas area */
+        canvas {
+            border: 2px solid #000; /* Optional border to visualize the canvas */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Purp Gobbler!</h1>
+
+    <script src="pixi.min.js"></script>
+    <script src="keyboard.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+    <script>
+
+
+        const backgroundMusic = new Howl({
+            src: ['background_music.mp3'],  // Path to your audio file
+            autoplay: true,                 // Automatically play the music when loaded
+            loop: true,                     // Loop the music
+            volume: 0.5                     // Set the initial volume (0 to 1)
+        });
+
+        const jumpSound = new Howl({
+            src: ['jump_sound.mp3'],  // Path to your jump sound effect file
+            volume: 1.0               // Set the volume (0 to 1)
+        });
+
+        const munchSound = new Howl({
+            src: ['munch.mp3'],  // Path to your jump sound effect file
+            volume: 1.0               // Set the volume (0 to 1)
+        });
+
+        const screamSound = new Howl({
+            src: ['scream.mp3'],  // Path to your jump sound effect file
+            volume: 1.0               // Set the volume (0 to 1)
+        });
+
+        const crashSound = new Howl({
+            src: ['car_crash.mp3'],  // Path to your jump sound effect file
+            volume: 1.0               // Set the volume (0 to 1)
+        });
+
+        const winSound = new Howl({
+            src: ['win.mp3'],  // Path to your jump sound effect file
+            volume: 1.0               // Set the volume (0 to 1)
+        });
+
+        // Optionally play the music manually if not autoplaying
+        backgroundMusic.play();
+        //Aliases
+        const Application = PIXI.Application,
+            Container = PIXI.Container,
+            loader = PIXI.Loader.shared,
+            resources = PIXI.Loader.shared.resources,
+            Graphics = PIXI.Graphics,
+            TextureCache = PIXI.utils.TextureCache,
+            Sprite = PIXI.Sprite,
+            Text = PIXI.Text,
+            TextStyle = PIXI.TextStyle;
+
+
+        const app = new Application({
+            width: 1200,
+            height: 400,
+            antialias: true,
+            transparent: false,
+            resolution: 1
+        });
+
+        //Add the canvas that Pixi automatically created for you to the HTML document
+        document.body.appendChild(app.view);
+
+        loader
+            .add("fruit.png")
+            .add("road_tile_1.png")
+            .add("npc.png")
+            .add("bloodSplat.png")
+            .add("car1.png")
+            .add("car2.png")
+            .add("car3.png")
+            .add("player.png")
+            .load(setup);
+
+        //Define any variables that are used in more than one function
+        let fruit, npc, state, player, menuMessage, score, scoreText, maxSpeed, minSpeed, splat;
+
+        // Gravity and jump-related variables
+        let gravity = 1;     // Gravity force pulling the player down
+        let jumpStrength = 25; // How strong the player jumps upwards
+        let maxFallSpeed = 10;  // Limit how fast the player can fall
+        let jumping = false;   // Track if the player is in the air
+
+        const tileArray = [];
+
+        let cars = [];
+
+        let carTextures = [];
+
+        carTextures.push(PIXI.Texture.from('car1.png'));
+        carTextures.push(PIXI.Texture.from('car2.png'));
+        carTextures.push(PIXI.Texture.from('car3.png'));
+
+
+        function setup() {
+
+            //numTiles = 6;
+            const numTiles = Math.ceil(1200 / 100) + 1;
+
+            maxSpeed = 10;
+            minSpeed = -10;
+
+
+            for (let i = 0; i < numTiles; i++) {
+                // Create a new tile for each position
+                tile = new Sprite(resources["road_tile_1.png"].texture);
+
+                // Scale the tile
+                tile.scale.set(0.4);
+
+                // Position the tile
+                tile.x = i * tile.width; // Position the tile horizontally
+                tile.y = app.screen.height - tile.height; // Position the tile vertically
+
+                // Add the tile to the stage
+                app.stage.addChild(tile);
+
+                tileArray.push(tile);
+            }
+
+            //Create the `playerCar` sprite
+            player = new Sprite(resources["player.png"].texture);
+            player.x = 100;
+            player.y = 275;
+            player.vx = 0;
+            player.vy = 0;
+            player.ax = 0.0;
+            player.ay = 0.0;
+            player.scale.set(0.5);
+            player.zIndex = 10;
+            app.stage.addChild(player);
+
+            //Create the `fruit pastille` sprite
+            fruit = new Sprite(resources["fruit.png"].texture);
+            fruit.x = 1300;
+            fruit.y = 20;
+            fruit.vx = 0;
+            fruit.vy = 0;
+            fruit.ax = 0.0;
+            fruit.ay = 0.0;
+            fruit.scale.set(0.1);
+            app.stage.addChild(fruit);
+
+            //Create the `fruit pastille` sprite
+            npc = new Sprite(resources["npc.png"].texture);
+
+
+            // Set the initial position relative to the pivot
+            npc.x = 1400;
+            npc.y = 190;
+            npc.vx = 0;
+            npc.vy = 0;
+            npc.ax = 0.0;
+            npc.ay = 0.0;
+            npc.scale.set(0.3);
+            app.stage.addChild(npc);
+
+
+            // Create two cars
+            for (let i = 0; i < 2; i++) {
+
+                // Randomly select between 'car1.png', 'car2.png', and 'car3.png'
+                let carTextures = ["car1.png", "car2.png", "car3.png"];
+                let index = Math.floor(Math.random() * carTextures.length);
+                let randomTexture = carTextures[index];
+
+                // Create a new sprite with the randomly selected texture
+                let vehicle = new Sprite(resources[randomTexture].texture);
+
+                // Randomize the x location between a range (e.g., 100 to 800)
+                vehicle.x = i * 500 + 1400;
+
+                // Fixed Y position (you can vary this too if needed)
+                vehicle.y = 260;
+
+                // Randomize speed (vx) between a range (e.g., 1 to 5)
+                vehicle.vx = Math.random() * (13 - 10) + 10;
+
+                // Set up other properties like scale, etc.
+                vehicle.scale.set(0.5);
+                vehicle.vy = 0;
+                vehicle.ax = 0;
+                vehicle.ay = 0;
+
+                vehicle.zIndex = 3;
+
+                // Add the car to the stage and to the cars array
+                app.stage.addChild(vehicle);
+                cars.push(vehicle);
+            }
+
+            score = 0;
+
+            //Capture the keyboard arrow keys
+            const left = keyboard(37),
+                up = keyboard(38),
+                right = keyboard(39),
+                down = keyboard(40);
+            space = keyboard(32);
+            enter = keyboard(13);
+            // Space bar for jumping
+
+
+
+            //Left arrow key `press` method
+            left.press = function () {
+
+                //Change the player's velocity when the key is pressed
+                player.ax = -1;
+                //player.vy = 0;
+            };
+
+            //Left arrow key `release` method
+            left.release = function () {
+
+                if (!right.isDown) {
+                    player.ax = 0;
+                    player.vx = 0;
+                }
+            };
+
+            //Right
+            right.press = function () {
+                player.ax = 1;
+            };
+            right.release = function () {
+                if (!left.isDown) {
+                    player.ax = 0;
+                    player.vx = 0;
+                }
+            };
+
+            // Spacebar `press` method (start jump)
+            space.press = function () {
+                if (!jumping) {  // Allow jumping only if player is not already jumping
+                    player.vy = -jumpStrength; // Start moving player upwards
+                    jumping = true;  // Set jumping state
+
+                    jumpSound.play();
+                }
+            };
+
+            // Spacebar `release` method (stop jump, apply gravity)
+            space.release = function () {
+
+                if (player.vy < 0) {
+                    player.vy = 0;
+                }
+                else {
+                    player.vy += gravity;  // As soon as space is released, apply gravity
+                }
+            };
+
+            //Set the game state
+            state = mainMenu;
+
+            //Start the game loop
+            app.ticker.add((delta) => gameLoop(delta));
+        }
+
+
+        function gameLoop(delta) {
+
+            //Update the current game state:
+            state(delta);
+        }
+
+        // Main menu state function
+        function mainMenu(delta) {
+            player.x = 100;
+            player.y = 275;
+
+            if (splat) {
+                app.stage.removeChild(splat);
+                splat = null;
+            }
+
+            for (let i = 0; i < 2; i++) {
+                cars[i].x = i * 500 + 1400;
+
+            }
+
+            if (npc.rotation > 0) {
+                // Set the NPC's rotation back to 0 to align it vertically
+                npc.rotation = 0;
+            }
+
+            npc.x = 1400;
+            npc.y = 190;
+
+            //car.vx = 10;
+            score = 0;
+
+            maxSpeed = 10;
+            minSpeed = -10;
+
+            if (scoreText) {
+                app.stage.removeChild(scoreText);
+                scoreText = null;  // Clean up the reference to allow it to be recreated later
+            }
+
+            if (!menuMessage) {
+                // Create and add the menu message only if it doesn't exist
+
+                const style1 = new TextStyle({
+                    fontFamily: "sans-serif",
+                    fontSize: 18,
+                    fill: "white",
+                });
+
+
+
+                menuMessage = new Text("Press Enter to Play", style1);
+
+                let canvasWidth = app.renderer.width;
+                let textWidth = menuMessage.width;
+
+                menuMessage.position.set((canvasWidth - textWidth) / 2, 8);
+                app.stage.addChild(menuMessage);
+            }
+
+
+            for (let i = 0; i < 13; i++) {
+
+                tile = tileArray[i];
+                tile.x -= 3;
+
+                if (tile.x < -200) {
+                    tile.x += 1400;
+                }
+            }
+
+            //car.x = 1400;
+            fruit.x = 1300;
+
+            // Event listener for 'Enter' key press
+            window.addEventListener("keydown", onKeyDown);
+
+            function onKeyDown(event) {
+                if (event.code === "Enter") {
+                    // When Enter is pressed, switch back to the play state
+                    state = play;
+
+                    // Remove the event listener to avoid multiple triggers
+                    window.removeEventListener("keydown", onKeyDown);
+                }
+            }
+            // You can add more logic here for your main menu (like showing buttons, etc.)
+        }
+
+        function play(delta) {
+
+
+            if (menuMessage) {
+                app.stage.removeChild(menuMessage);
+                menuMessage = null;  // Clean up the reference to allow it to be recreated later
+            }
+            //use the player's velocity to make it move
+
+            if (!scoreText) {
+                // Create and add the menu message only if it doesn't exist
+
+                const style2 = new TextStyle({
+                    fontFamily: "sans-serif",
+                    fontSize: 18,
+                    fill: "white",
+                });
+
+                scoreText = new Text(`Score: ${score}`, style2);
+
+                scoreText.position.set(20, 8);
+                app.stage.addChild(scoreText);
+            }
+            else {
+
+                scoreText.text = `Score: ${score}`;
+            }
+
+            player.vx += player.ax;
+
+            if (player.vx >= 0) {
+                player.vx = Math.min(player.vx, maxSpeed);
+            }
+            else {
+                player.vx = Math.max(player.vx, minSpeed);
+
+            }
+
+
+            player.x += player.vx;
+
+            for (let i = 0; i < 13; i++) {
+
+                tile = tileArray[i];
+                tile.x -= 3;
+
+                if (tile.x < -200) {
+                    tile.x += 1400;
+                }
+            }
+
+            fruit.x -= 3;
+            if (fruit.x < -50) {
+                fruit.x = 1300;
+            }
+
+            npc.x -= 3;
+            if (npc.x < -50) {
+                npc.x = 1400;
+                npc.rotation = 0;
+                npc.y = 190;
+            }
+
+            // Apply gravity if the player is jumping or in the air
+            if (jumping) {
+                player.vy += gravity;
+                // Limit the maximum falling speed to avoid excessive fall speed
+                if (player.vy > maxFallSpeed) {
+                    player.vy = maxFallSpeed;
+                }
+            }
+
+            // Detect if player has landed (e.g., check if on the ground)
+            if (player.y > 275) {  // Replace groundY with your ground level Y
+                player.y = 275;
+                player.vy = 0;
+                jumping = false;  // Reset jumping state once landed
+            }
+
+            player.y += player.vy;
+
+            cars.forEach(vehicle => {
+                // Move the vehicle to the left
+                vehicle.x -= vehicle.vx;
+
+                // Check if the vehicle has gone off the left side of the screen
+                if (vehicle.x < -200) {
+
+                    vehicle.x = Math.random() * (2000 - 1400) + 1400;
+
+                    vehicle.vx = Math.random() * (13 - 10) + 10;
+
+                    let index = Math.floor(Math.random() * carTextures.length);
+
+                    vehicle.texture = carTextures[index];
+                }
+            });
+
+            if (hitTestRectangle(player, fruit)) {
+                score += 1;
+                fruit.x = 1300;
+                maxSpeed += 3;
+                minSpeed -= 3;
+
+                munchSound.play();
+
+            }
+
+            //check for a collision between the player and the box
+            if (hitTestRectangle(player, npc)) {
+
+                if (npc.rotation === 0) {
+                    npc.rotation = Math.PI / 2;  // Rotate by 90 degrees
+                    npc.x += npc.width;
+                    npc.y += npc.height - 60;
+
+                    bloodSplat(npc);
+                    screamSound.play();
+
+                }
+            }
+
+            if (splat) {
+                splat.x -= 3;
+            }
+
+            for (let i = 0; i < 2; i++) {
+
+                if (hitTestRectangle(cars[i], player)) {
+
+                    state = mainMenu;
+
+                    crashSound.play();
+                }
+            }
+
+            if (score === 14) {
+
+                state = mainMenu;
+
+                winSound.play();
+
+            }
+
+            app.stage.sortChildren();
+        }
+
+        function bloodSplat(spri) {
+
+            splat = new Sprite(resources["bloodSplat.png"].texture);
+
+
+            splat.x = spri.centerX - splat.width / 2;
+            splat.y = spri.centerY - splat.height / 2 + 40;
+
+            // Add the blood splat to the stage or container
+            app.stage.addChild(splat);
+        }
+
+        //The `hitTestRectangle` function
+        function hitTestRectangle(r1, r2) {
+
+            //Define the variables we'll need to calculate
+            let hit, combinedHalfWidths, combinedHalfHeights, vx, vy;
+
+            //hit will determine whether there's a collision
+            hit = false;
+
+            //Find the center points of each sprite
+            r1.centerX = r1.x + r1.width / 2;
+            r1.centerY = r1.y + r1.height / 2;
+            r2.centerX = r2.x + r2.width / 2;
+            r2.centerY = r2.y + r2.height / 2;
+
+            //Find the half-widths and half-heights of each sprite
+            r1.halfWidth = r1.width / 2;
+            r1.halfHeight = r1.height / 2;
+            r2.halfWidth = r2.width / 2;
+            r2.halfHeight = r2.height / 2;
+
+            //Calculate the distance vector between the sprites
+            vx = r1.centerX - r2.centerX;
+            vy = r1.centerY - r2.centerY;
+
+            //Figure out the combined half-widths and half-heights
+            combinedHalfWidths = r1.halfWidth + r2.halfWidth;
+            combinedHalfHeights = r1.halfHeight + r2.halfHeight;
+
+            //Check for a collision on the x axis
+            if (Math.abs(vx) < combinedHalfWidths) {
+
+                //A collision might be occurring. Check for a collision on the y axis
+                if (Math.abs(vy) < combinedHalfHeights) {
+
+                    //There's definitely a collision happening
+                    hit = true;
+                } else {
+
+                    //There's no collision on the y axis
+                    hit = false;
+                }
+            } else {
+
+                //There's no collision on the x axis
+                hit = false;
+            }
+
+            //`hit` will be either `true` or `false`
+            return hit;
+        };
+
+    </script>
+    <p>Collect 14 purps to win!</p>
+</body>
+</html>

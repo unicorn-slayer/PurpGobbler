@@ -1,0 +1,6 @@
+.vscode/
+node_modules/
+obj/
+.eslintrc.json
+NodeConsoleApp1.esproj
+nuget.config
